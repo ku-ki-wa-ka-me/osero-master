@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>かんたんリバーし2</title>
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-152725100-2"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+
+        gtag('config', 'UA-152725100-2');
+    </script>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="//cdn.rawgit.com/milligram/milligram/master/dist/milligram.min.css">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.1.1/socket.io.js"></script>
+    <style type="text/css">
+        #main {
+            background: green;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 5px;
+        }
+
+        .warp li {
+            float: left;
+        }
+
+        .test {
+
+            overflow: auto;
+            height: 250px;
+            line-height: 1.5;
+            padding: 10px 0;
+        }
+
+        body {
+            max-height: 100%;
+            max-height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="barba-wrapper">
+        <div class="barba-container">
+            <h1>
+                かんたんリバーしゲーム
+            </h1>
+            <p id="a">読み込み中</p>
+            <canvas id="main" width="480" height="480"></canvas>
+            <p id="turn"></p>
+            <form name="myform">
+                <input name="text" type="text" placeholder="チャットを送れるよ">
+                <button name="btn">送信</button>
+            </form>
+
+            <hr>
+
+            <ul id="message"></ul>
+
+            <script>
+                var socket = io.connect();
+                var canvas = document.getElementById("main");
+                var ctx = canvas.getContext("2d");
+
+                var sW, sH, s;
+                sW = window.innerWidth;
+                sH = window.innerHeight;
+                if (sW > sH) {
+                    var size = sH * 0.8;
+                } else {
+                    var size = sW * 0.8;
+                }
+
+                canvas.width = canvas.height = size;//盤面のサイズを設定する
+                var masusize = size / 8;
+                var komasize = masusize / 2 - 5;
+
+                canvas.addEventListener("click", onClick, false);
+                var message = document.getElementById('message');
+                var form = document.forms.myform;
+                var gameid = location.pathname.replace("/game/", "");
+                var ban_ar = new Array(8);//盤面保存用の配列作成
+                for (var x = 0; x < ban_ar.length; x++) {
+                    ban_ar[x] = new Array(8);
+                }
+                for (var x = 0; x < 8; x++) {//配列初期化
+                    for (var y = 0; y < 8; y++) {
+                        ban_ar[x][y] = 0;
+                    }
+                }
+
+                socket.emit("ready", gameid);
+                ban_new();
+
+                socket.on('ban', function (msg) {//サーバーからデータが送られてきたときの処理
+                    if (msg.name) socket.emit('setUserName', prompt('チャットに使用する名前を入力してくだせぇ'));
+                    console.log(msg.turn)
+                    if (msg.role) document.getElementById("a").innerHTML = "あなたは" + msg.role + "ですね";
+                    if (msg.turn == 1) { document.getElementById("turn").innerHTML = "黒のターンですわ"; }
+                    else { document.getElementById("turn").innerHTML = "白のターンですわ" }//ターン情報を読み込み、適用
+                    if (msg.msg) alert(msg.msg);//メッセージが含まれていた場合表示する
+                    ban_ar = msg.ban;
+                    ban_set();//描画関数をたたく
+                    console.log(msg)
+                });
+
+                socket.on('chat', function (msg) {//チャットの受信処理
+                    var li = document.createElement('li');
+
+                    li.textContent = msg;
+                    message.appendChild(li);
+                });
+
+                function ban_new() {//オセロの盤面の初期化処理
+                    var drow = masusize;
+                    for (var c = 0; c < 8; c++) {
+                        ctx.beginPath();
+                        ctx.moveTo(drow, 0);
+                        ctx.lineTo(drow, size);
+                        ctx.moveTo(0, drow);
+                        ctx.lineTo(size, drow);
+                        ctx.closePath();
+                        ctx.stroke();
+                        drow = drow + masusize;
+                    }
+                }
+
+                function ban_set() {//描画関数
+                    var kx, ky;
+                    kx = masusize / 2;
+                    ky = masusize / 2;
+                    for (var cx = 0; cx < 8; cx++) {
+                        for (var cy = 0; cy < 8; cy++) {
+                            if (ban_ar[cx][cy] != 0) {
+                                ctx.beginPath();
+                                ctx.arc(kx, ky, komasize, (0 * Math.PI) / 180, (360 * Math.PI) / 180, false);
+                                if (ban_ar[cx][cy] == -1) ctx.fillStyle = "rgba(255,255,255,255)";
+                                if (ban_ar[cx][cy] == 1) ctx.fillStyle = "rgba(0,0,0,255)";
+                                ctx.fill();
+                                ctx.strokeStyle = "black";
+                                ctx.lineWidth = 2;
+                                ctx.stroke();
+                            }
+                            kx = kx + masusize;
+                        }
+                        kx = masusize / 2;
+                        ky = ky + masusize;
+                    }
+                }
+
+                function onClick(e) {//盤面がクリックされた時
+                    console.log("click");
+                    scrollTo(0, 0);
+                    var x = e.clientX - canvas.offsetLeft;
+                    var y = e.clientY - canvas.offsetTop;
+                    var put = {//gameidと置いた場所をオブジェクトにする
+                        gameid: gameid,
+                        x: Math.floor(x / masusize),
+                        y: Math.floor(y / masusize)
+                    }
+                    socket.emit("put", put);//オブジェクトを送信する
+                }
+
+                form.btn.addEventListener('click', function (e) {//チャットの送信処理
+                    e.preventDefault();
+
+                    socket.emit('chat', form.text.value);
+                    form.text.value = '';
+                })
+            </script>
+        </div>
+
+    </div>
+</body>
+
+</html>
